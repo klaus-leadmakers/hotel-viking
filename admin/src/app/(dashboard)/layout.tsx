@@ -33,7 +33,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/users', label: 'Users', icon: Users },
+    { href: '/users', label: 'Brugere', icon: Users },
     { href: '/mews', label: 'Mews Config', icon: Settings },
     { href: '/gdpr', label: 'GDPR Logs', icon: FileText },
     { href: '/operations', label: "Backup 'n Deploy", icon: Settings },
@@ -41,7 +41,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   const getPageTitle = () => {
     if (pathname.includes('dashboard')) return 'Dashboard';
-    if (pathname.includes('users')) return 'Users';
+    if (pathname.includes('users')) return 'Brugere';
     if (pathname.includes('mews')) return 'Mews Configuration';
     if (pathname.includes('gdpr')) return 'GDPR Audit Logs';
     return 'Hotel Viking Admin';

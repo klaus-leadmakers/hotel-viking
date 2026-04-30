@@ -12,6 +12,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [env, setEnv] = useState<'staging' | 'live' | null>(null);
 
   useEffect(() => {
     const user = localStorage.getItem('hotel_user');
@@ -25,6 +26,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    setEnv(window.location.port === '8080' ? 'staging' : 'live');
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem('hotel_token');
     localStorage.removeItem('hotel_user');
@@ -36,6 +41,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { href: '/users', label: 'Brugere', icon: Users },
     { href: '/mews', label: 'Mews Config', icon: Settings },
     { href: '/gdpr', label: 'GDPR Logs', icon: FileText },
+    { href: '/operations', label: "Backup 'n Deploy", icon: Settings },
   ];
 
   const getPageTitle = () => {
@@ -70,6 +76,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Miljø-indikator */}
+        {env && (
+          <div className="px-4 py-2 border-b border-gray-100">
+            {env === 'staging' ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                Staging
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                Live
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-5 space-y-1">

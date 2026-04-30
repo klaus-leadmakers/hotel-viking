@@ -1,0 +1,93 @@
+networks:
+  staging:
+    driver: bridge
+
+volumes:
+  staging-postgres-data:
+  staging-redis-data:
+  staging-minio-data:
+
+services:
+  staging-postgres:
+    image: postgres:15-alpine
+    container_name: hotel-staging-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=hotelapp
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=hotel_platform_staging
+    volumes:
+      - staging-postgres-data:/var/lib/postgresql/data
+    networks:
+      - staging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hotelapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  staging-redis:
+    image: redis:7-alpine
+    container_name: hotel-staging-redis
+    restart: unless-stopped
+    networks:
+      - staging
+
+  staging-minio:
+    image: minio/minio:latest
+    container_name: hotel-staging-minio
+    ports:
+      - "127.0.0.1:9002:9000"
+    restart: unless-stopped
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - staging-minio-data:/data
+    command: server /data
+    networks:
+      - staging
+
+  staging-api:
+    build:
+      context: ./api
+    container_name: hotel-staging-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4500:3000"
+    env_file:
+      - .env.staging
+    depends_on:
+      staging-postgres:
+        condition: service_healthy
+      staging-redis:
+        condition: service_started
+    networks:
+      - staging
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  staging-admin:
+    build:
+      context: ./admin
+      args:
+        NEXT_PUBLIC_IS_STAGING: "true"
+        NEXT_PUBLIC_API_URL: "http://204.168.172.207:8080"
+    container_name: hotel-staging-admin
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4503:3001"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - staging
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/admin || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

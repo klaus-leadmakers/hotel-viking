@@ -78,19 +78,17 @@ async function handle(req, res) {
       const logFile = path.join(dir, 'backup.log');
 
       const cmd = [
-        'echo "=== Step 1/2: Database dump ==="',
-        'docker exec ' + STG_DB_CONTAINER + ' pg_dump -U ' + STG_DB_USER + ' ' + STG_DB_NAME + ' | gzip > ' + dir + '/db.sql.gz',
-        'echo "DB dump OK: $(du -sh ' + dir + '/db.sql.gz | cut -f1)"',
-        'echo "=== Step 2/2: Code snapshot ==="',
-        'tar -czf ' + dir + '/code.tar.gz' +
-          ' --exclude=' + STAGING_DIR + '/admin/node_modules' +
-          ' --exclude=' + STAGING_DIR + '/admin/.next' +
-          ' --exclude=' + STAGING_DIR + '/api/node_modules' +
-          ' --exclude=' + STAGING_DIR + '/api/dist' +
-          ' -C / opt/hotel-platform-staging/admin opt/hotel-platform-staging/api',
-        'echo "Code snapshot OK: $(du -sh ' + dir + '/code.tar.gz | cut -f1)"',
-        'python3 -c "import json; m=json.load(open(\'' + dir + '/meta.json\')); m[\'status\']=\'completed\'; m[\'completedAt\']=__import__(\'datetime\').datetime.now().isoformat(); open(\'' + dir + '/meta.json\',\'w\').write(json.dumps(m))"',
-        'echo "BACKUP_COMPLETE"'
+        'echo "=== Step 1/6: Syncing API code ==="',
+        'rsync -a --delete --exclude=node_modules --exclude=dist --exclude=.env ' + STAGING_DIR + '/api/ ' + LIVE_DIR + '/api/',
+        'echo "=== Step 2/6: Syncing admin code ==="',
+        'rsync -a --delete --exclude=node_modules --exclude=.next --exclude=\".env*\" ' + STAGING_DIR + '/admin/ ' + LIVE_DIR + '/admin/',
+        'echo "=== Step 3/6: Git commit + push ==="',
+        'cd ' + LIVE_DIR + ' && git add -A && (git diff --cached --quiet || git commit -m "deploy: sync from staging $(date +%H:%M)") && git push origin main || true',
+        'echo "=== Step 4/6: Building live admin ==="',
+        'cd ' + LIVE_DIR + ' && docker compose build admin',
+        'echo "=== Step 5/6: Restarting live admin ==="',
+        'cd ' + LIVE_DIR + ' && docker compose up -d --no-deps admin',
+        'echo "DEPLOY_COMPLETE"'
       ].join(' && ');
 
       runBg(cmd, logFile);
@@ -179,12 +177,12 @@ async function handle(req, res) {
         'rsync -a --delete --exclude=node_modules --exclude=dist --exclude=.env ' + STAGING_DIR + '/api/ ' + LIVE_DIR + '/api/',
         'echo "=== Step 2/5: Syncing admin code ==="',
         'rsync -a --delete --exclude=node_modules --exclude=.next --exclude=\".env*\" ' + STAGING_DIR + '/admin/ ' + LIVE_DIR + '/admin/',
-        'echo "=== Step 3/5: Building live API ==="',
-        'cd ' + LIVE_DIR + ' && docker compose build api',
+        'echo "=== Step 3/5: Git commit + push til GitHub ==="',
+        'cd ' + LIVE_DIR + ' && git add -A && (git diff --cached --quiet || git commit -m "deploy: sync from staging") && git push origin main || true',
         'echo "=== Step 4/5: Building live admin ==="',
         'cd ' + LIVE_DIR + ' && docker compose build admin',
-        'echo "=== Step 5/5: Restarting live services ==="',
-        'cd ' + LIVE_DIR + ' && docker compose up -d api admin',
+        'echo "=== Step 5/5: Restarting live admin ==="',
+        'cd ' + LIVE_DIR + ' && docker compose up -d --no-deps admin',
         'echo "DEPLOY_COMPLETE"'
       ].join(' && ');
 

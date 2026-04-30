@@ -20,5 +20,5 @@ jobs:
             cd /opt/hotel-platform
             git pull origin main
             docker compose build admin
-            docker compose up -d
+            docker compose up -d --no-deps admin
             echo "✓ Live opdateret!"

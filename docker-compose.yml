@@ -1,0 +1,145 @@
+version: '3.9'
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  loki_data:
+  grafana_data:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+services:
+
+  api:
+    build: ./api
+    container_name: hotel-api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    working_dir: /app
+    env_file: .env
+    ports:
+      - "127.0.0.1:3500:3000"
+    networks: [internal]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: hotel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    container_name: hotel-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASS} --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes: [redis_data:/data]
+    networks: [internal]
+
+  minio:
+    image: minio/minio:latest
+    container_name: hotel-minio
+    restart: unless-stopped
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASS}
+    volumes: [minio_data:/data]
+    networks: [internal]
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: hotel-uptime-kuma
+    restart: unless-stopped
+    volumes:
+      - ./uptime-kuma:/app/data
+    ports:
+      - "127.0.0.1:3003:3001"
+    networks: [internal]
+
+
+  admin:
+    build:
+      context: ./admin
+      args:
+        - NEXT_PUBLIC_API_URL=http://204.168.172.207
+    container_name: hotel-admin
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3003:3001"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/admin || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: hotel-loki
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - internal
+
+  promtail:
+    image: grafana/promtail:2.9.4
+    container_name: hotel-promtail
+    restart: unless-stopped
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - internal
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: hotel-grafana
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_SERVER_ROOT_URL=https://hotelvikingapi.leadmakers.dk/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_LOG_LEVEL=warn
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - internal
+    depends_on:
+      - loki
+
+  # === LOGGING STACK ===
+
